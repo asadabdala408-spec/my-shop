@@ -4,6 +4,7 @@ using Jewelryshop.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,15 +15,11 @@ if (!string.IsNullOrWhiteSpace(port))
     builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 }
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-if (string.IsNullOrWhiteSpace(connectionString))
-{
-    connectionString = ConvertDatabaseUrl(Environment.GetEnvironmentVariable("DATABASE_URL"));
-}
+var connectionString = ResolveConnectionString(builder.Configuration);
 if (string.IsNullOrWhiteSpace(connectionString))
 {
     throw new InvalidOperationException(
-        "Database is not configured. Set ConnectionStrings__DefaultConnection or DATABASE_URL.");
+        "Database is not configured. Set ConnectionStrings__DefaultConnection or DATABASE_URL on Railway.");
 }
 
 builder.Services.AddControllers()
@@ -103,11 +100,8 @@ app.MapGet("/health/db", async (AppDbContext db) =>
 {
     try
     {
-        var canConnect = await db.Database.CanConnectAsync();
-        if (!canConnect)
-        {
-            return Results.Json(new { status = "error", message = "Cannot connect to database." }, statusCode: 503);
-        }
+        await db.Database.OpenConnectionAsync();
+        await db.Database.CloseConnectionAsync();
 
         var categories = await db.Categories.CountAsync();
         var products = await db.Products.CountAsync();
@@ -115,7 +109,8 @@ app.MapGet("/health/db", async (AppDbContext db) =>
     }
     catch (Exception ex)
     {
-        return Results.Json(new { status = "error", message = ex.Message }, statusCode: 503);
+        var detail = ex.InnerException?.Message ?? ex.Message;
+        return Results.Json(new { status = "error", message = detail }, statusCode: 503);
     }
 });
 
@@ -144,25 +139,52 @@ app.MapControllers();
 
 app.Run();
 
-static string? ConvertDatabaseUrl(string? databaseUrl)
+static string? ResolveConnectionString(IConfiguration configuration)
 {
-    if (string.IsNullOrWhiteSpace(databaseUrl))
+    var raw = configuration.GetConnectionString("DefaultConnection")
+        ?? configuration["DATABASE_URL"]
+        ?? Environment.GetEnvironmentVariable("DATABASE_URL");
+
+    return NormalizeConnectionString(raw);
+}
+
+static string? NormalizeConnectionString(string? raw)
+{
+    if (string.IsNullOrWhiteSpace(raw))
     {
         return null;
     }
 
-    if (!databaseUrl.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
-        && !databaseUrl.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+    // Npgsql does not need channel_binding; it can break Railway/Neon connections.
+    raw = System.Text.RegularExpressions.Regex.Replace(
+        raw,
+        @"[&?]channel_binding=[^&]*",
+        string.Empty,
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    if (raw.Contains("your-neon", StringComparison.OrdinalIgnoreCase)
+        || raw.Contains("your_user", StringComparison.OrdinalIgnoreCase)
+        || raw.Contains("your_password", StringComparison.OrdinalIgnoreCase))
     {
-        return databaseUrl;
+        return null;
     }
 
-    var uri = new Uri(databaseUrl);
-    var userInfo = uri.UserInfo.Split(':', 2);
-    var username = Uri.UnescapeDataString(userInfo[0]);
-    var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
-    var database = uri.AbsolutePath.TrimStart('/');
+    try
+    {
+        var csb = new NpgsqlConnectionStringBuilder(raw)
+        {
+            SslMode = SslMode.Require
+        };
 
-    var dbPort = uri.Port > 0 ? uri.Port : 5432;
-    return $"Host={uri.Host};Port={dbPort};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+        if (string.IsNullOrWhiteSpace(csb.Host))
+        {
+            return null;
+        }
+
+        return csb.ConnectionString;
+    }
+    catch
+    {
+        return raw;
+    }
 }
