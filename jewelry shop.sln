@@ -1,0 +1,35 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jewelryshop.Api", "Jewelryshop.Api\Jewelryshop.Api.csproj", "{FE00D29D-3EFF-D295-FCF3-98A586FC3369}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "JewelryShop_API_Complete", "JewelryShop_API_Complete", "{30AB38D2-6FED-ED4B-74C8-79CE13AD67DD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jewelryshop.Api", "JewelryShop_API_Complete\Jewelryshop.Api.csproj", "{9D92B5A4-6F22-E31F-2143-9A40D5A884A1}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FE00D29D-3EFF-D295-FCF3-98A586FC3369}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FE00D29D-3EFF-D295-FCF3-98A586FC3369}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FE00D29D-3EFF-D295-FCF3-98A586FC3369}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FE00D29D-3EFF-D295-FCF3-98A586FC3369}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D92B5A4-6F22-E31F-2143-9A40D5A884A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D92B5A4-6F22-E31F-2143-9A40D5A884A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D92B5A4-6F22-E31F-2143-9A40D5A884A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D92B5A4-6F22-E31F-2143-9A40D5A884A1}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9D92B5A4-6F22-E31F-2143-9A40D5A884A1} = {30AB38D2-6FED-ED4B-74C8-79CE13AD67DD}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5132ACD3-AD5E-489D-A3A6-BF73ABC05C0B}
+	EndGlobalSection
+EndGlobal
