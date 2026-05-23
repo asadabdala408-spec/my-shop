@@ -14,6 +14,17 @@ if (!string.IsNullOrWhiteSpace(port))
     builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 }
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    connectionString = ConvertDatabaseUrl(Environment.GetEnvironmentVariable("DATABASE_URL"));
+}
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Database is not configured. Set ConnectionStrings__DefaultConnection or DATABASE_URL.");
+}
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -37,7 +48,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<JwtService>();
@@ -63,13 +74,23 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await dbContext.Database.MigrateAsync();
-}
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-await DatabaseSeeder.SeedAsync(app.Services);
+_ = Task.Run(async () =>
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await dbContext.Database.MigrateAsync();
+        await DatabaseSeeder.SeedAsync(app.Services);
+        app.Logger.LogInformation("Database migrated and seeded.");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Database migration or seeding failed.");
+    }
+});
 
 if (app.Environment.IsDevelopment())
 {
@@ -80,7 +101,29 @@ if (app.Environment.IsDevelopment())
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapControllers();
 
 app.Run();
+
+static string? ConvertDatabaseUrl(string? databaseUrl)
+{
+    if (string.IsNullOrWhiteSpace(databaseUrl))
+    {
+        return null;
+    }
+
+    if (!databaseUrl.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+        && !databaseUrl.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+    {
+        return databaseUrl;
+    }
+
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':', 2);
+    var username = Uri.UnescapeDataString(userInfo[0]);
+    var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
+    var database = uri.AbsolutePath.TrimStart('/');
+
+    var dbPort = uri.Port > 0 ? uri.Port : 5432;
+    return $"Host={uri.Host};Port={dbPort};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+}
