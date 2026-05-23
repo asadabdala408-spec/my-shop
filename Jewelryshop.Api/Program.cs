@@ -99,21 +99,38 @@ app.UseCors("Frontend");
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-_ = Task.Run(async () =>
+app.MapGet("/health/db", async (AppDbContext db) =>
 {
     try
     {
-        using var scope = app.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await dbContext.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(app.Services);
-        app.Logger.LogInformation("Database migrated and seeded.");
+        var canConnect = await db.Database.CanConnectAsync();
+        if (!canConnect)
+        {
+            return Results.Json(new { status = "error", message = "Cannot connect to database." }, statusCode: 503);
+        }
+
+        var categories = await db.Categories.CountAsync();
+        var products = await db.Products.CountAsync();
+        return Results.Ok(new { status = "ok", categories, products });
     }
     catch (Exception ex)
     {
-        app.Logger.LogError(ex, "Database migration or seeding failed.");
+        return Results.Json(new { status = "error", message = ex.Message }, statusCode: 503);
     }
 });
+
+try
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.MigrateAsync();
+    await DatabaseSeeder.SeedAsync(app.Services);
+    app.Logger.LogInformation("Database migrated and seeded.");
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Database migration or seeding failed on startup.");
+}
 
 if (app.Environment.IsDevelopment())
 {
