@@ -1,3 +1,4 @@
+# Local build from this folder: docker build -t jewelryshop-api .
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Jewelryshop.Api.csproj ./
