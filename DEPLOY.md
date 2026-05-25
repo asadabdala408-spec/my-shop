@@ -20,23 +20,56 @@ Mashruucan waa **laba qaybood** oo kala go'an:
 3. **Root Directory** (ama **Service path**): `Jewelryshop.Api`
 4. Railway wuxuu isticmaali doonaa `Dockerfile` + `railway.toml`.
 
-### PostgreSQL
+### Database — Neon (aad isticmaalayso) ama Railway PostgreSQL
+
+#### Neon + Railway (tusaale aad)
+
+Ma u baahanid PostgreSQL Railway. Database-ka waa **Neon**; API-ga waa **Railway**.
+
+1. Gal [neon.tech](https://neon.tech) → project-kaaga → **Connect**.
+2. Dooro **Connection string** → **Direct** (pooling OFF — wanaagsan migrations).
+3. Nuqul URL-ka, tusaale:
+
+```text
+postgresql://USER:PASSWORD@ep-xxxx.region.aws.neon.tech/neondb?sslmode=require
+```
+
+4. Railway → **API service** → **Variables** → ku dar **mid** ka mid ah:
+
+| Name | Value |
+|------|--------|
+| `DATABASE_URL` | paste Neon URL oo dhan (`postgresql://...`) |
+
+**ama** Npgsql format:
+
+| Name | Value |
+|------|--------|
+| `ConnectionStrings__DefaultConnection` | `Host=ep-xxxx.region.aws.neon.tech;Database=neondb;Username=USER;Password=PASSWORD;SSL Mode=Require` |
+
+5. **Redeploy** API.
+
+> **Ha isticmaalin** `${{Postgres.DATABASE_URL}}` haddii aadan PostgreSQL Railway lahayn — Neon waa external.
+
+#### Railway PostgreSQL (haddii aad Neon ka tagto)
 
 1. Project-ka → **+ New** → **Database** → **PostgreSQL**.
-2. Ku xir API service-ka: **Variables** → **Add Reference** → `DATABASE_URL` ama isticmaal connection string Neon/Postgres.
+2. API → **Variables** → `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (Add Reference).
 
 ### Environment variables (API service)
 
-Ku dar **Variables** tab-ka:
+**Ha ku darin** placeholder `your_user` / `your_password` — app-ku wuu iska diidi doonaa.
+
+Ku dar sidoo kale:
 
 ```text
-ConnectionStrings__DefaultConnection=<postgres connection string>
 Jwt__Issuer=Jewelryshop.Api
 Jwt__Audience=Jewelryshop.Client
 Jwt__Key=<random secret, at least 32 characters>
 Cors__AllowedOrigins=https://YOUR-APP.vercel.app,http://localhost:5173
 ASPNETCORE_ENVIRONMENT=Production
 ```
+
+Kadib **Redeploy** API service.
 
 Cloudinary (haddii aad sawirro upload gareyso):
 

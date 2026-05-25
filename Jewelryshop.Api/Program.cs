@@ -16,7 +16,7 @@ var connectionString = ResolveConnectionString(builder.Configuration);
 var databaseConfigured = !string.IsNullOrWhiteSpace(connectionString);
 
 Console.WriteLine(
-    $"[startup] PORT={port}, DATABASE_URL env={(string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DATABASE_URL")) ? "missing" : "set")}, databaseConfigured={databaseConfigured}");
+    $"[startup] PORT={port}, DATABASE_URL={EnvSet("DATABASE_URL")}, PGHOST={EnvSet("PGHOST")}, databaseConfigured={databaseConfigured}");
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -106,6 +106,21 @@ app.UseCors("Frontend");
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", databaseConfigured }));
 
+app.MapGet("/health/config", () => Results.Ok(new
+{
+    databaseConfigured,
+    port,
+    env = new
+    {
+        DATABASE_URL = EnvSet("DATABASE_URL"),
+        DATABASE_PRIVATE_URL = EnvSet("DATABASE_PRIVATE_URL"),
+        DATABASE_PUBLIC_URL = EnvSet("DATABASE_PUBLIC_URL"),
+        PGHOST = EnvSet("PGHOST"),
+        PGDATABASE = EnvSet("PGDATABASE"),
+        connectionStringsDefault = EnvSet("ConnectionStrings__DefaultConnection")
+    }
+}));
+
 app.MapGet("/health/db", async (IServiceProvider services) =>
 {
     if (!databaseConfigured)
@@ -171,13 +186,51 @@ app.MapControllers();
 
 app.Run();
 
+static string EnvSet(string name) =>
+    string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name)) ? "missing" : "set";
+
 static string? ResolveConnectionString(IConfiguration configuration)
 {
-    var raw = configuration.GetConnectionString("DefaultConnection")
-        ?? configuration["DATABASE_URL"]
-        ?? Environment.GetEnvironmentVariable("DATABASE_URL");
+    var candidates = new[]
+    {
+        configuration.GetConnectionString("DefaultConnection"),
+        configuration["DATABASE_URL"],
+        configuration["DATABASE_PRIVATE_URL"],
+        configuration["DATABASE_PUBLIC_URL"],
+        configuration["POSTGRES_URL"],
+        Environment.GetEnvironmentVariable("DATABASE_URL"),
+        Environment.GetEnvironmentVariable("DATABASE_PRIVATE_URL"),
+        Environment.GetEnvironmentVariable("DATABASE_PUBLIC_URL"),
+        Environment.GetEnvironmentVariable("POSTGRES_URL"),
+        BuildFromPgParts(configuration)
+    };
 
-    return NormalizeConnectionString(raw);
+    foreach (var candidate in candidates)
+    {
+        var normalized = NormalizeConnectionString(candidate);
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            return normalized;
+        }
+    }
+
+    return null;
+}
+
+static string? BuildFromPgParts(IConfiguration configuration)
+{
+    var host = configuration["PGHOST"] ?? Environment.GetEnvironmentVariable("PGHOST");
+    var database = configuration["PGDATABASE"] ?? Environment.GetEnvironmentVariable("PGDATABASE");
+    var user = configuration["PGUSER"] ?? Environment.GetEnvironmentVariable("PGUSER");
+    var password = configuration["PGPASSWORD"] ?? Environment.GetEnvironmentVariable("PGPASSWORD");
+    var port = configuration["PGPORT"] ?? Environment.GetEnvironmentVariable("PGPORT") ?? "5432";
+
+    if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(database) || string.IsNullOrWhiteSpace(user))
+    {
+        return null;
+    }
+
+    return $"Host={host};Port={port};Database={database};Username={user};Password={password};SSL Mode=Require";
 }
 
 static string? NormalizeConnectionString(string? raw)
