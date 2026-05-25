@@ -13,11 +13,10 @@ var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 var connectionString = ResolveConnectionString(builder.Configuration);
-if (string.IsNullOrWhiteSpace(connectionString))
-{
-    throw new InvalidOperationException(
-        "Database is not configured. Set ConnectionStrings__DefaultConnection or DATABASE_URL on Railway.");
-}
+var databaseConfigured = !string.IsNullOrWhiteSpace(connectionString);
+
+Console.WriteLine(
+    $"[startup] PORT={port}, DATABASE_URL env={(string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DATABASE_URL")) ? "missing" : "set")}, databaseConfigured={databaseConfigured}");
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -60,8 +59,11 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+if (databaseConfigured)
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(connectionString!));
+}
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<JwtService>();
@@ -70,7 +72,8 @@ builder.Services.AddScoped<CloudinaryService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var key = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT key is not configured.");
+        var key = builder.Configuration["Jwt:Key"]
+            ?? "replace-this-with-a-long-secure-secret-key-that-is-at-least-32-characters";
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -87,16 +90,38 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-app.Logger.LogInformation("CORS allowed origins: {Origins}", string.Join(", ", configuredOrigins));
+app.Logger.LogInformation(
+    "Listening on http://0.0.0.0:{Port}, database configured: {DatabaseConfigured}, CORS: {Origins}",
+    port,
+    databaseConfigured,
+    string.Join(", ", configuredOrigins));
+
+if (!databaseConfigured)
+{
+    app.Logger.LogWarning(
+        "DATABASE_URL is missing or invalid. Railway: API service → Variables → Add Reference → PostgreSQL → DATABASE_URL");
+}
 
 app.UseCors("Frontend");
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/health", () => Results.Ok(new { status = "ok", databaseConfigured }));
 
-app.MapGet("/health/db", async (AppDbContext db) =>
+app.MapGet("/health/db", async (IServiceProvider services) =>
 {
+    if (!databaseConfigured)
+    {
+        return Results.Json(
+            new
+            {
+                status = "error",
+                message = "DATABASE_URL or ConnectionStrings__DefaultConnection is not set. Railway: Variables → Add Reference → PostgreSQL → DATABASE_URL"
+            },
+            statusCode: 503);
+    }
+
     try
     {
+        var db = services.GetRequiredService<AppDbContext>();
         await db.Database.OpenConnectionAsync();
         await db.Database.CloseConnectionAsync();
 
@@ -111,25 +136,28 @@ app.MapGet("/health/db", async (AppDbContext db) =>
     }
 });
 
-var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
-lifetime.ApplicationStarted.Register(() =>
+if (databaseConfigured)
 {
-    _ = Task.Run(async () =>
+    var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+    lifetime.ApplicationStarted.Register(() =>
     {
-        try
+        _ = Task.Run(async () =>
         {
-            using var scope = app.Services.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            await dbContext.Database.MigrateAsync();
-            await DatabaseSeeder.SeedAsync(app.Services);
-            app.Logger.LogInformation("Database migrated and seeded.");
-        }
-        catch (Exception ex)
-        {
-            app.Logger.LogError(ex, "Database migration or seeding failed.");
-        }
+            try
+            {
+                using var scope = app.Services.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await dbContext.Database.MigrateAsync();
+                await DatabaseSeeder.SeedAsync(app.Services);
+                app.Logger.LogInformation("Database migrated and seeded.");
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogError(ex, "Database migration or seeding failed.");
+            }
+        });
     });
-});
+}
 
 if (app.Environment.IsDevelopment())
 {
