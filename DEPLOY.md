@@ -61,6 +61,21 @@ https://YOUR-RAILWAY-URL/health
 
 Waa inuu soo celiyo: `{"status":"ok"}`
 
+Database (waa inuu shaqeeyaa):
+
+```text
+https://YOUR-RAILWAY-URL/health/db
+```
+
+Waa inuu soo celiyo: `{"status":"ok","categories":5,"products":15}` (tirooyinka way kala duwanaan karaan).
+
+Haddii `{"status":"error","message":"Cannot connect to database."}`:
+
+1. API service → **Variables** → **Add Reference** → dooro PostgreSQL service → `DATABASE_URL` (ha isticmaalin `DATABASE_PUBLIC_URL` gudaha Railway).
+2. Ama ku dar: `ConnectionStrings__DefaultConnection` = isla `DATABASE_URL` (postgres://…).
+3. Hubi in PostgreSQL service uu **Running** yahay.
+4. **Redeploy** API kadib beddelka.
+
 ---
 
 ## 2. Frontend — Vercel

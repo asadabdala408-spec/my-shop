@@ -169,6 +169,12 @@ static string? NormalizeConnectionString(string? raw)
         return null;
     }
 
+    if (raw.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+        || raw.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+    {
+        return TryBuildFromPostgresUri(raw);
+    }
+
     try
     {
         var csb = new NpgsqlConnectionStringBuilder(raw)
@@ -185,6 +191,43 @@ static string? NormalizeConnectionString(string? raw)
     }
     catch
     {
-        return raw;
+        return null;
+    }
+}
+
+static string? TryBuildFromPostgresUri(string uri)
+{
+    try
+    {
+        var parsed = new Uri(uri);
+        var userInfo = parsed.UserInfo.Split(':', 2);
+        var username = userInfo.Length > 0 ? Uri.UnescapeDataString(userInfo[0]) : string.Empty;
+        var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
+        var database = parsed.AbsolutePath.TrimStart('/');
+        if (string.IsNullOrWhiteSpace(database))
+        {
+            database = "railway";
+        }
+
+        var csb = new NpgsqlConnectionStringBuilder
+        {
+            Host = parsed.Host,
+            Port = parsed.Port > 0 ? parsed.Port : 5432,
+            Database = database,
+            Username = username,
+            Password = password,
+            SslMode = SslMode.Require
+        };
+
+        if (string.IsNullOrWhiteSpace(csb.Host))
+        {
+            return null;
+        }
+
+        return csb.ConnectionString;
+    }
+    catch
+    {
+        return null;
     }
 }
