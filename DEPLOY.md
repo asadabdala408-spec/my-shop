@@ -69,6 +69,13 @@ https://YOUR-RAILWAY-URL/health/db
 
 Waa inuu soo celiyo: `{"status":"ok","categories":5,"products":15}` (tirooyinka way kala duwanaan karaan).
 
+Haddii Railway **Healthcheck failed** (`/health` service unavailable):
+
+1. API → **Variables** → **Add Reference** → PostgreSQL → `DATABASE_URL` (waa lagama maarmaan).
+2. Hubi `Jwt__Key` (ugu yaraan 32 xaraf) haddii aad appsettings default ka saartay.
+3. Push code cusub (migration waa inaysan xannibin `/health`).
+4. **Deploy Logs** → eeg qalad startup (tusaale `Database is not configured`).
+
 Haddii `{"status":"error","message":"Cannot connect to database."}`:
 
 1. API service → **Variables** → **Add Reference** → dooro PostgreSQL service → `DATABASE_URL` (ha isticmaalin `DATABASE_PUBLIC_URL` gudaha Railway).

@@ -9,11 +9,8 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var port = Environment.GetEnvironmentVariable("PORT");
-if (!string.IsNullOrWhiteSpace(port))
-{
-    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
-}
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 var connectionString = ResolveConnectionString(builder.Configuration);
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -114,18 +111,25 @@ app.MapGet("/health/db", async (AppDbContext db) =>
     }
 });
 
-try
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStarted.Register(() =>
 {
-    using var scope = app.Services.CreateScope();
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await dbContext.Database.MigrateAsync();
-    await DatabaseSeeder.SeedAsync(app.Services);
-    app.Logger.LogInformation("Database migrated and seeded.");
-}
-catch (Exception ex)
-{
-    app.Logger.LogError(ex, "Database migration or seeding failed on startup.");
-}
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await dbContext.Database.MigrateAsync();
+            await DatabaseSeeder.SeedAsync(app.Services);
+            app.Logger.LogInformation("Database migrated and seeded.");
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Database migration or seeding failed.");
+        }
+    });
+});
 
 if (app.Environment.IsDevelopment())
 {
